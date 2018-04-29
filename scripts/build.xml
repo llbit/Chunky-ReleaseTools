@@ -1,0 +1,29 @@
+<project name="Chunky">
+	<fail message="The version property must be set! (-Dversion=...)" unless="version" />
+	<target name="nsi">
+		<copy file="dist/Chunky.nsi" todir="${basedir}" overwrite="true">
+			<filterset>
+				<filter token="VERSION" value="${version}" />
+			</filterset>
+		</copy>
+	</target>
+
+	<target name="macApp">
+		<mkdir dir="dmgdir" />
+		<taskdef name="appbundler"
+			classpath="tools/appbundler-1.0ea.jar"
+			classname="com.oracle.appbundler.AppBundlerTask" />
+		<appbundler
+			outputdirectory	= "dmgdir"
+			name			= "Chunky"
+			displayname		= "Chunky"
+			identifier		= "se.llbit.Chunky"
+			shortversion	= "${version}"
+			mainclassname	= "se.llbit.chunky.launcher.ChunkyLauncher"
+			icon			= "dist/Chunky.icns">
+			<option value="-Dapple.laf.useScreenMenuBar=true" />
+			<option value="-Dapple.awt.textantialiasing=true" />
+			<classpath file="dmgdir/chunky-${version}.jar" />
+		</appbundler>
+	</target>
+</project>
