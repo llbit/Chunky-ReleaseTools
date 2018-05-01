@@ -129,9 +129,14 @@ Section "Start Menu Shortcuts" SecSM
 
   CreateDirectory "$SMPROGRAMS\Chunky"
 
+  ; NOTE: -Dprism.order=sw is used to disable hardware rendering for the launcher.
+  ; We do this because hardware rendering can cause the JavaFX to not render anything in the
+  ; window on Windows 10.
+  ; See https://www.reddit.com/r/javahelp/comments/84w6i6/problem_displaying_anything_with_javafx_only/
+
   ; Default Chunky Shortcut
   ;;;;CreateShortCut "$SMPROGRAMS\Chunky\Chunky.lnk" "$INSTDIR\chunky.jar" "" "$INSTDIR\chunky.ico"
-  CreateShortCut "$SMPROGRAMS\Chunky\Chunky.lnk" "$JavaExe" "-jar $\"$INSTDIR\chunky.jar$\"" "$INSTDIR\chunky.ico"
+  CreateShortCut "$SMPROGRAMS\Chunky\Chunky.lnk" "$JavaExe" "-Dprism.order=sw -jar $\"$INSTDIR\chunky.jar$\"" "$INSTDIR\chunky.ico"
   CreateShortCut "$SMPROGRAMS\Chunky\ReadMe.lnk" "$INSTDIR\ReadMe.html"
   CreateShortCut "$SMPROGRAMS\Chunky\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
   CreateShortCut "$SMPROGRAMS\Chunky\Wiki.lnk" "$INSTDIR\Wiki.URL"
@@ -140,7 +145,7 @@ Section "Start Menu Shortcuts" SecSM
   Delete "$SMPROGRAMS\Chunky\Chunky (more memory).lnk"
 
   ; Launcher Shortcut
-  CreateShortCut "$SMPROGRAMS\Chunky\Chunky (Launcher).lnk" "$JavaExe" "-jar $\"$INSTDIR\chunky.jar$\" --launcher" "$INSTDIR\chunky.ico"
+  CreateShortCut "$SMPROGRAMS\Chunky\Chunky (Launcher).lnk" "$JavaExe" "-Dprism.order=sw -jar $\"$INSTDIR\chunky.jar$\" --launcher" "$INSTDIR\chunky.ico"
 
 SectionEnd
 
