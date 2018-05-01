@@ -23,7 +23,7 @@
 			icon			= "dist/Chunky.icns">
 			<option value="-Dapple.laf.useScreenMenuBar=true" />
 			<option value="-Dapple.awt.textantialiasing=true" />
-			<classpath file="dmgdir/chunky-${version}.jar" />
+			<classpath file="build/chunky-${version}.jar" />
 		</appbundler>
 	</target>
 </project>
