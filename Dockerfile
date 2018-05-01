@@ -53,6 +53,5 @@ ENV LC_ALL en_US.UTF-8
 COPY scripts .
 COPY data .
 COPY tools tools
-COPY private .
 
 CMD ["./entrypoint.sh"]

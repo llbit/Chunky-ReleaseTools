@@ -673,7 +673,7 @@ for arg in sys.argv[1:]:
 			sys.exit(1)
 
 try:
-	credentials = Credentials('credentials.gpg')
+	credentials = Credentials(path.join('private', 'credentials.gpg'))
 
 	if options['prawdebug']:
 		r = reddit_login()

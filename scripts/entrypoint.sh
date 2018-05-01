@@ -2,8 +2,9 @@
 
 set -e
 
+cp private/gradle.properties ~/.gradle/
 git pull
-gpg --import release.key
+gpg --import private/release.key
 
 echo "Pre-release checklist:"
 echo "    * Update release notes (& check for typos)."

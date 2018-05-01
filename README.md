@@ -2,12 +2,19 @@
 
 Scripts to automate the Chunky release process with a Docker container.
 
-## Release Process
+## One Time Setup
 
-One time setup (export release key):
+The private/ directory should be populated with
+gradle.properties and release.key.  The private directory also needs to be
+added as a Docker volume.
 
+    mkdir private
+    cp ~/.gradle/gradle.properties private
     gpg --export-secret-keys <KEYID> > private/release.key
+    docker volume create --opt type=none --opt o=bind --opt device="$PWD/private" chunky_private
 
+
+## Release Process
 
 Add release notes:
 
