@@ -30,5 +30,7 @@ PRAW is used to post relase threads on Reddit.
 
 Appbundler ([bitbucket.org/infinitekind/appbundler][1]) is used to build the Mac App.
 
+Wine and NSIS are used to build a Windows installer.
+
 
 [1]: https://bitbucket.org/infinitekind/appbundler/src

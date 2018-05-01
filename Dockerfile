@@ -32,16 +32,15 @@ RUN curl -L https://sourceforge.net/projects/nsis/files/NSIS%203/3.03/nsis-3.03.
 	unzip nsis-3.03.zip && \
 	rm nsis-3.03.zip
 
+COPY conf/gitconfig .gitconfig
+
 # Get Chunky and Gradle:
 RUN git clone https://github.com/llbit/chunky.git /chunky && \
 	/chunky/gradlew -version
 
 WORKDIR /chunky
 
-RUN git config user.email "jesper@llbit.se" && \
-	git config user.name "Jesper Öqvist"
-
-# This bit taken from https://stackoverflow.com/a/28406007/1250278
+# This bit is taken from https://stackoverflow.com/a/28406007/1250278
 # I don't know why the sed command is needed, and couldn't easily find an
 # explanation, but it seems to not work without it.
 RUN sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \

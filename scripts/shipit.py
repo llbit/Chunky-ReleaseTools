@@ -40,24 +40,24 @@ from string import join
 from os import path
 from shutil import copyfile
 
+import launchpadlib
+from launchpadlib.launchpad import Launchpad
+
 # Debug logging:
 #import httplib2
 #httplib2.debuglevel = 1
 
-with warnings.catch_warnings():
-	# Ignore annoying warnings from lazr and mpl_toolkits about missing __init__.py.
-	warnings.simplefilter("ignore")
-	import launchpadlib
-	from launchpadlib.launchpad import Launchpad
-	from launchpadlib.credentials import RequestTokenAuthorizationEngine
-
 class Credentials:
 	initialized = False
 	credentials = {}
+	path = ''
+
+	def __init__(self, filepath):
+		self.path = path.abspath(filepath)
 
 	def init(self):
-		if not self.initialized and path.exists('credentials.gpg'):
-			proc = Popen(['gpg', '--decrypt', 'credentials.gpg'], stdout=PIPE)
+		if not self.initialized and path.exists(self.path):
+			proc = Popen(['gpg', '--decrypt', self.path], stdout=PIPE)
 			creds = proc.communicate()[0]
 			self.credentials = json.loads(creds)
 		self.initialized = True
@@ -95,7 +95,7 @@ class Credentials:
 		self.save()
 
 	def save(self):
-		proc = Popen(['gpg', '--output', 'credentials.gpg', '-r', 'jesper@llbit.se', '--encrypt'], stdin=PIPE)
+		proc = Popen('gpg --output credentials.gpg -r jesper@llbit.se --encrypt'.split(), stdin=PIPE)
 		proc.communicate(json.dumps(self.credentials))
 		if proc.returncode is not 0:
 			print("Warning: failed to encrypt credentials!")
@@ -142,7 +142,7 @@ class Version:
 		self.notes_file = notes_fn
 
 		try:
-			# load changelog
+			# Load changelog.
 			with codecs.open("ChangeLog.txt", 'r', encoding='utf-8') as f:
 				f.readline() # Skip version line.
 				first = True
@@ -185,20 +185,6 @@ class Version:
 		sign_file(self.exe_file())
 		sign_file(self.dmg_file())
 
-class LaunchpadConsoleAuthorization(RequestTokenAuthorizationEngine):
-	"""Launchpad application authorizer using the console."""
-
-	def __init__(self, service_root, application_name):
-		super(LaunchpadConsoleAuthorization, self).__init__(
-				service_root, application_name, None, None)
-
-	def make_end_user_authorize_token(self, credentials, request_token):
-		authorization_url = self.authorization_url(request_token)
-		print('Please visit the uthentication URL: %s' % authorization_url)
-		print('Press Enter when you have authorized this application.')
-		raw_input()
-		credentials.exchange_request_token_for_access_token(self.web_root)
-
 def sign_file(filename):
 	while True:
 		passphrase = credentials.getpass('gpg passphrase')
@@ -217,43 +203,46 @@ def sign_file(filename):
 				sys.exit(1)
 		break
 
-def print_prerelease_checklist(version):
-	print("Pre-Release Checklist:")
-	print("    * Update PRAW (pip install praw --upgrade)")
-	print("    * Update launchpadlib")
-	print("    * Check release notes for typos: %s" % version.notes_file)
-	print("    * Restart script if release notes were updated")
-	print("    * Update ChangeLog (check for typos)")
-	print("    * Commit all final changes in Git")
+# The following class is from https://stackoverflow.com/a/24176022/1250278
+class cd:
+	"""Context manager for changing the current working directory"""
+	def __init__(self, newPath):
+		self.newPath = os.path.expanduser(newPath)
+
+	def __enter__(self):
+		self.savedPath = os.getcwd()
+		os.chdir(self.newPath)
+
+	def __exit__(self, etype, value, traceback):
+		os.chdir(self.savedPath)
+
+# Runs a command and aborts build if it failed.
+def check_call(description, command):
+	if call(command) != 0:
+		print("Error: %s failed! Aborting build." % description)
+		sys.exit(1)
 
 def build_release(version):
 	if version.suffix:
 		print("Error: non-release version string speicifed (remove suffix)")
 		print("Hint: add the -snapshot flag to build snapshot")
 		sys.exit(1)
-	print_prerelease_checklist(version)
 	print("Ready to build version %s!" % version.full)
 	if raw_input('Build release? [y/N] ') == 'y':
-		if call(['./gradlew', '--rerun-tasks', '-PnewVersion=' + version.full,
-				'tarball', 'releaseJar', 'releaseZip', 'documentation', 'release']) is not 0:
-			print("Error: release build failed!")
-			sys.exit(1)
-		if call(['ant', '-Dversion=' + version.full, 'nsi', 'macApp']) is not 0:
-			print("Error: Ant build failed!")
-			sys.exit(1)
-		if nsis(['Chunky.nsi']) is not 0:
-			print("Error: NSIS build failed!")
-			sys.exit(1)
+		check_call('Gradle build',
+				['./gradlew', '--rerun-tasks', '-PnewVersion=' + version.full,
+				'tarball', 'releaseJar', 'releaseZip', 'documentation', 'release'])
+		check_call('Ant build', ['ant', '-Dversion=' + version.full, 'nsi', 'macApp'])
+		check_call('NSIS', nsis(['Chunky.nsi']))
 		# https://stackoverflow.com/a/7553878/1250278
 		os.makedirs('dmgdir/.background')
 		copyfile('dist/chunky-dmg.png', 'dmgdir/.background/background.png')
 		copyfile('dist/DS_Store', 'dmgdir/.DS_Store')
 		os.symlink('/Applications', 'dmgdir/Applications')
 		copyfile('dist/Chunky.icns', 'dmgdir/.Volume.icns')
-		if call('genisoimage -V Chunky -D -R -apple -no-pad -o'.split() \
-				+ ['build/Chunky-%s.dmg' % version.full, 'dmgdir']) is not 0:
-			print("Error: failed to create DMG image!")
-			sys.exit(1)
+		check_call('DMG build',
+				'genisoimage -V Chunky -D -R -apple -no-pad -o'.split() \
+				+ ['build/Chunky-%s.dmg' % version.full, 'dmgdir'])
 		shutil.rmtree('dmgdir') # Cleanup.
 		version.sign_files()
 	if raw_input('Publish to Launchpad? [y/N] ') == 'y':
@@ -267,25 +256,23 @@ def build_release(version):
 	if raw_input('Update documentation? [y/N] ') == 'y':
 		update_docs(version)
 
-# call NSIS with given args
+# Builds NSIS command line with given args.
 def nsis(args):
-	return call(['wine', path.expanduser('~/nsis-3.03/makensis.exe')] + args)
+	return ['wine', path.expanduser('~/nsis-3.03/makensis.exe')] + args
 
 def build_snapshot(version):
 	if not version.suffix:
 		print("Error: non-snapshot version string speicifed (add suffix)")
 		sys.exit(1)
-	print_prerelease_checklist(version)
 	print("Ready to build snapshot %s!" % version.full)
 	if raw_input('Build snapshot? [y/N] ') == "y":
-		while call(['git', 'tag', '-a', version.full, '-m', 'Snapshot build']) is not 0:
+		while call(['git', 'tag', '-a', version.full, '-m', 'Snapshot build']) != 0:
 			if raw_input("Delete tag and try again? [y/N] ") == "y":
 				if call(['git', 'tag', '-d', version.full]) == 0:
 					continue
 			sys.exit(1)
-		if call(['./gradlew', '--rerun-tasks', '-PnewVersion=' + version.full, 'releaseJar']) is not 0:
-			print("Error: release build failed!")
-			sys.exit(1)
+		check_call('snapshot build',
+				['./gradlew', '--rerun-tasks', '-PnewVersion=' + version.full, 'releaseJar'])
 	if raw_input('Publish snapshot to FTP? [y/N] ') == "y":
 		publish_snapshot_ftp(version)
 	if raw_input('Post snapshot thread? [y/N] ') == "y":
@@ -375,25 +362,36 @@ def update_docs(version):
 	if not path.exists(version_links):
 		print('Error: can not update documentation because %s does not exist. You must publish to launchpad to generate this file.' % version_links)
 		return
-	docs_dir = '../git/chunky-docs'
-	if not path.exists(docs_dir):
-		docs_dir = '../chunky-docs'
-	while not path.exists(docs_dir):
-		docs_dir = raw_input('documentation repo: ')
+	docs_dir = 'docs'
+	docs_repo = 'github.com/llbit/chunky-docs.git'
+	if path.exists(docs_dir):
+		with cd(docs_dir):
+			check_call('git', ['git', 'pull'])
+	else:
+		check_call('cloning documentation repo',
+				['git', 'clone', "https://%s" % docs_repo, docs_dir])
 	copyfile(version_links, path.join(docs_dir, 'version.properties'))
 	version_dir = '%s/docs/release/%s' % (docs_dir, version.full)
 	if not path.exists(version_dir):
 		os.mkdir(version_dir)
 	with codecs.open('build/release_notes-%s.md' % version.full,'r',encoding='utf-8') as src:
-		with codecs.open('%s/docs/release/%s/release_notes.md' % (docs_dir, version.full),'w',encoding='utf-8') as dst:
+		with codecs.open('%s/docs/release/%s/release_notes.md' % (docs_dir, version.full),
+				'w', encoding='utf-8') as dst:
 			dst.write('''Chunky %s
 ============
 
 ''' % version.full)
 			dst.write(src.read())
+	with cd(docs_dir):
+		check_call('git', 'git add .'.split())
+		check_call('git', ['git', 'commit', '-m', 'Release %s' % version.full])
+		gh_user = credentials.get('github user')
+		gh_token = credentials.getpass('github token')
+		check_call('git',
+				['git', 'push', 'https://%s:%s@%s' % (gh_user, gh_token, docs_repo), 'master'])
 
 def lp_upload_file(version, release, filename, description, content_type, file_type):
-	# TODO handle re-uploads
+	# TODO: handle re-uploads.
 	FILE_TYPES = dict(
 		tarball='Code Release Tarball',
 		readme='README File',
@@ -431,12 +429,6 @@ def check_file_exists(filename):
 		print("Error: required signature for %s not found!" % filename)
 		sys.exit(1)
 
-def lp_wait():
-	# Trying to upload files in quick succession causes Launchpad to give
-	# an error message "signature_content: Cannot upload files larger than 1024 bytes".
-	print("Waiting a while to avoid Launchpad ratelimit...")
-	time.sleep(30)
-
 def publish_launchpad(version):
 	# Check that required files exist.
 	check_file_exists(version.jar_file())
@@ -452,11 +444,6 @@ def publish_launchpad(version):
 		service = launchpadlib.uris.STAGING_SERVICE_ROOT
 
 	app_name = 'Releasebot'
-	# Using a custom authorizer to avoid this issue:
-	# https://bugs.launchpad.net/launchpadlib/+bug/1507048
-	#launchpad = Launchpad.login_with(app_name, server, 'lpcache',
-	#		authorization_engine=LaunchpadConsoleAuthorization(service, app_name))
-
 	launchpad = Launchpad.login_with(app_name, server, 'lpcache')
 
 	chunky = launchpad.projects['chunky']
@@ -472,14 +459,14 @@ def publish_launchpad(version):
 	is_new_release = release is None
 
 	if release is None:
-		# Check if milestone exists
+		# Check if milestone exists.
 		milestone = None
 		for ms in chunky.all_milestones:
 			if ms.name == version.milestone:
 				milestone = ms
 				break
 
-		# Create milestone (and series) if needed
+		# Create milestone (and series) if needed.
 		if milestone is None:
 			series = None
 			for s in chunky.series:
@@ -496,7 +483,7 @@ def publish_launchpad(version):
 			milestone = series.newMilestone(name=version.milestone)
 			print("Milestone %s created." % version.milestone)
 
-		# create release
+		# Create release.
 		release = milestone.createProductRelease(
 			release_notes=version.release_notes,
 			changelog=version.changelog,
@@ -506,7 +493,7 @@ def publish_launchpad(version):
 
 	assert release is not None
 
-	# upload release files
+	# Upload release files.
 	jar_url = lp_upload_file(
 		version,
 		release,
@@ -516,7 +503,6 @@ def publish_launchpad(version):
 		'installer')
 	assert jar_url
 	print(jar_url)
-	lp_wait()
 	tarball_url = lp_upload_file(
 		version,
 		release,
@@ -526,7 +512,6 @@ def publish_launchpad(version):
 		'tarball')
 	assert tarball_url
 	print(tarball_url)
-	lp_wait()
 	zip_url = lp_upload_file(
 		version,
 		release,
@@ -536,7 +521,6 @@ def publish_launchpad(version):
 		'installer')
 	assert zip_url
 	print(zip_url)
-	lp_wait()
 	dmg_url = lp_upload_file(
 		version,
 		release,
@@ -546,7 +530,6 @@ def publish_launchpad(version):
 		'installer')
 	assert dmg_url
 	print(dmg_url)
-	lp_wait()
 	exe_url = lp_upload_file(
 		version,
 		release,
@@ -657,9 +640,7 @@ options = {
 	'docs': False,
 	'snapshot': False,
 	'prawdebug': False,
-	'sign': False,
-	'launcher': False,
-	'testnsis': False
+	'launcher': False
 }
 for arg in sys.argv[1:]:
 	if arg == '-h' or arg == '--h' or arg == '-help' or arg == '--help':
@@ -692,7 +673,7 @@ for arg in sys.argv[1:]:
 			sys.exit(1)
 
 try:
-	credentials = Credentials()
+	credentials = Credentials('credentials.gpg')
 
 	if options['prawdebug']:
 		r = reddit_login()
@@ -705,12 +686,6 @@ try:
 	if options['launcher']:
 		publish_launcher(version)
 		sys.exit(0)
-	elif options['testnsis']:
-		# test NSIS for Windows installer
-		# requires Wine on non-Windows
-		if nsis(['Chunky.nsi']) is not 0:
-			print("Error: NSIS build failed!")
-		sys.exit(0)
 
 	if version == None:
 		version = Version(raw_input('Enter version: '))
@@ -721,14 +696,16 @@ try:
 		update_docs(version)
 	elif options['snapshot']:
 		build_snapshot(version)
-	elif options['sign']:
-		# test cryptosigning
-		version.sign_files()
 	else:
 		build_release(version)
 		if raw_input('Push git release commit? [y/N] ') == "y":
-			call(['git', 'push', 'origin', 'master'])# push version bump commit
-			call(['git', 'push', 'origin', version.full])# push version tag
+			gh_user = credentials.get('github user')
+			gh_token = credentials.getpass('github token')
+			main_repo = 'github.com/llbit/chunky.git'
+			check_call('git',
+					['git', 'push', 'https://%s:%s@%s' % (gh_user, gh_token, main_repo), 'master'])
+			check_call('git',
+					['git', 'push', 'https://%s:%s@%s' % (gh_user, gh_token, main_repo), version.full])
 		print("All done.")
 except SystemExit:
 	raise
