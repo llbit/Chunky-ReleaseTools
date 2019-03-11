@@ -116,6 +116,7 @@ class Version:
 		if not r:
 			print("Invalid version name: %s (expected e.g. 1.2.13-alpha1)" % version)
 			sys.exit(1)
+		self.updatesite = 'chunkyupdate' if not version.startswith("2.") else 'chunkyupdate2'
 		self.milestone = r.groups()[0]
 		self.suffix = r.groups()[2]
 		self.series = join(self.milestone.split('.')[:2], '.')
@@ -328,7 +329,7 @@ def ftp_login():
 
 def publish_snapshot_ftp(version):
 	ftp = ftp_login()
-	ftp.cwd('chunkyupdate')
+	ftp.cwd(version.updatesite)
 	with open('build/ChunkyLauncher.jar', 'rb') as f:
 		ftp.storbinary('STOR ChunkyLauncher.jar', f)
 	with open('latest.json', 'rb') as f:
@@ -340,7 +341,7 @@ def publish_snapshot_ftp(version):
 
 def publish_ftp(version):
 	ftp = ftp_login()
-	ftp.cwd('chunkyupdate')
+	ftp.cwd(version.updatesite)
 	with open('build/ChunkyLauncher.jar', 'rb') as f:
 		ftp.storbinary('STOR ChunkyLauncher.jar', f)
 	with open('latest.json', 'rb') as f:
@@ -352,7 +353,7 @@ def publish_ftp(version):
 
 def publish_launcher(version):
 	ftp = ftp_login()
-	ftp.cwd('chunkyupdate')
+	ftp.cwd(version.updatesite)
 	with open('build/ChunkyLauncher.jar', 'rb') as f:
 		ftp.storbinary('STOR ChunkyLauncher.jar', f)
 	ftp.quit()
@@ -548,11 +549,11 @@ def write_release_notes(version, exe_url, dmg_url, zip_url):
 * [Windows installer](%s)
 * [Mac bundle](%s)
 * [Cross-platform binaries](%s)
-* [Only launcher (win, mac, linux)](http://chunkyupdate.llbit.se/ChunkyLauncher.jar)
+* [Only launcher (win, mac, linux)](http://%s.llbit.se/ChunkyLauncher.jar)
 
 ## Release Notes
 
-''' % (exe_url, dmg_url, zip_url)
+''' % (exe_url, dmg_url, zip_url, version.updatesite)
 	text += version.release_notes + '''
 
 ## ChangeLog

@@ -3,5 +3,5 @@ docker build -t chunkybuild .
 docker run -it \
   --rm \
   --name chunky \
-  -v chunky_private:/chunky/private \
+  -v "$PWD/private:/chunky/private" \
   chunkybuild
