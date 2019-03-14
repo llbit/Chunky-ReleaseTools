@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-# Copyright (c) 2013-2018 Jesper Öqvist <jesper@llbit.se>
+# Copyright (c) 2013-2019 Jesper Öqvist <jesper@llbit.se>
 #
 # This file is part of Chunky.
 #
@@ -47,12 +47,11 @@ from launchpadlib.launchpad import Launchpad
 #import httplib2
 #httplib2.debuglevel = 1
 
+"Class for managing user credentials for publishing releases."
 class Credentials:
-	initialized = False
-	credentials = {}
-	path = ''
-
 	def __init__(self, filepath):
+		self.initialized = False
+		self.credentials = {}
 		self.path = path.abspath(filepath)
 
 	def init(self):
@@ -100,15 +99,9 @@ class Credentials:
 		if proc.returncode is not 0:
 			print("Warning: failed to encrypt credentials!")
 
+"Contains description of a relase version, including release notes and updatesite"
 class Version:
 	regex = re.compile('^(\d+\.\d+(\.\d+)?)(-[a-zA-Z]*\.?\d*)?$')
-	full = ''
-	milestone = ''
-	suffix = ''
-	series = ''
-	changelog = ''
-	release_notes = ''
-	notes_file = ''
 
 	def __init__(self, version):
 		self.full = version
@@ -140,6 +133,8 @@ class Version:
 			print("Error: failed to read release notes!")
 			sys.exit(1)
 
+		self.changelog = ""
+		self.release_notes = ""
 		self.notes_file = notes_fn
 
 		try:
@@ -228,7 +223,7 @@ def build_release(version):
 		print("Error: non-release version string speicifed (remove suffix)")
 		print("Hint: add the -snapshot flag to build snapshot")
 		sys.exit(1)
-	print("Ready to build version %s!" % version.full)
+	print("Ready to build version %s (@%s)!" % (version.full, version.updatesite))
 	if raw_input('Build release? [y/N] ') == 'y':
 		check_call('Gradle build',
 				['./gradlew', '--rerun-tasks', '-PnewVersion=' + version.full,
@@ -265,7 +260,7 @@ def build_snapshot(version):
 	if not version.suffix:
 		print("Error: non-snapshot version string speicifed (add suffix)")
 		sys.exit(1)
-	print("Ready to build snapshot %s!" % version.full)
+	print("Ready to build snapshot %s (@%s)!" % (version.full, version.updatesite))
 	if raw_input('Build snapshot? [y/N] ') == "y":
 		while call(['git', 'tag', '-a', version.full, '-m', 'Snapshot build']) != 0:
 			if raw_input("Delete tag and try again? [y/N] ") == "y":
@@ -542,7 +537,7 @@ def publish_launchpad(version):
 	print(exe_url)
 	return (is_new_release, exe_url, dmg_url, zip_url, jar_url)
 
-"output markdown"
+"Output markdown release notes."
 def write_release_notes(version, exe_url, dmg_url, zip_url):
 	text = '''## Downloads
 
@@ -568,13 +563,13 @@ exe.dl.link=%s
 dmg.dl.link=%s
 zip.dl.link=%s''' % (version.milestone, exe_url, dmg_url, zip_url))
 
-"Set a Reddit submission to be an announcement"
+"Set a Reddit submission to be an announcement."
 def set_announcement(post):
 	flair = next(x for x in post.flair.choices()
 			if x['flair_css_class'] == 'announcement')['flair_template_id']
 	post.flair.select(flair, 'announcement')
 
-"post reddit release thread"
+"Post reddit release thread."
 def post_release_thread(version):
 	try:
 		with codecs.open('build/release_notes-%s.md' % version.full, 'r', encoding='utf-8') as f:
@@ -635,85 +630,86 @@ def patch_url(version, url):
 		json.dump(j, f)
 
 ### MAIN
-version = None
-options = {
-	'ftp': False,
-	'docs': False,
-	'snapshot': False,
-	'prawdebug': False,
-	'launcher': False
-}
-for arg in sys.argv[1:]:
-	if arg == '-h' or arg == '--h' or arg == '-help' or arg == '--help':
-		print("usage: SHIPIT [COMMAND] [VERSION]")
-		print("commands:")
-		print("    -ftp         upload latest.json to FTP server")
-		print("    -docs        update documentation")
-		print("    -snapshot    build snapshot instead of release")
-		print("    -launcher    upload the launcher to the FTP server")
-		print("")
-		print("This utility creates a new release of Chunky")
-		print("Required Python libraries: launchpadlib, PRAW")
-		print("Upgrade with >pip install --upgrade <PKG>")
-		sys.exit(0)
-	else:
-		if arg.startswith('-'):
-			matched = False
-			for key in options.keys():
-				if arg == '-'+key:
-					options[key] = True
-					matched = True
-					break
-			if not matched:
-				print("Error: unknown command: %s" % arg)
-				sys.exit(1)
-		elif version is None:
-			version = Version(arg)
+if __name__ == "__main__":
+	version = None
+	options = {
+		'ftp': False,
+		'docs': False,
+		'snapshot': False,
+		'prawdebug': False,
+		'launcher': False
+	}
+	for arg in sys.argv[1:]:
+		if arg == '-h' or arg == '--h' or arg == '-help' or arg == '--help':
+			print("usage: SHIPIT [COMMAND] [VERSION]")
+			print("commands:")
+			print("    -ftp         upload latest.json to FTP server")
+			print("    -docs        update documentation")
+			print("    -snapshot    build snapshot instead of release")
+			print("    -launcher    upload the launcher to the FTP server")
+			print("")
+			print("This utility creates a new release of Chunky")
+			print("Required Python libraries: launchpadlib, PRAW")
+			print("Upgrade with >pip install --upgrade <PKG>")
+			sys.exit(0)
 		else:
-			print("Error: redundant argument: %s" % arg)
-			sys.exit(1)
+			if arg.startswith('-'):
+				matched = False
+				for key in options.keys():
+					if arg == '-'+key:
+						options[key] = True
+						matched = True
+						break
+				if not matched:
+					print("Error: unknown command: %s" % arg)
+					sys.exit(1)
+			elif version is None:
+				version = Version(arg)
+			else:
+				print("Error: redundant argument: %s" % arg)
+				sys.exit(1)
 
-try:
-	credentials = Credentials(path.join('private', 'credentials.gpg'))
+	try:
+		credentials = Credentials(path.join('private', 'credentials.gpg'))
 
-	if options['prawdebug']:
-		r = reddit_login()
-		post = r.subreddit('chunky').submit('Test post',
-				selftext='Debugging the reddit bot.')
-		print(post.flair.choices())
-		set_announcement(post)
-		sys.exit(0)
+		if options['prawdebug']:
+			r = reddit_login()
+			post = r.subreddit('chunky').submit('Test post',
+					selftext='Debugging the reddit bot.')
+			print(post.flair.choices())
+			set_announcement(post)
+			sys.exit(0)
 
-	if options['launcher']:
-		publish_launcher(version)
-		sys.exit(0)
+		if options['launcher']:
+			publish_launcher(version)
+			sys.exit(0)
 
-	if version == None:
-		version = Version(raw_input('Enter version: '))
+		if version == None:
+			version = Version(raw_input('Enter version: '))
 
-	if options['ftp']:
-		publish_ftp(version)
-	elif options['docs']:
-		update_docs(version)
-	elif options['snapshot']:
-		build_snapshot(version)
-	else:
-		build_release(version)
-		if raw_input('Push git release commit? [y/N] ') == "y":
-			gh_user = credentials.get('github user')
-			gh_token = credentials.getpass('github token')
-			main_repo = 'github.com/llbit/chunky.git'
-			check_call('git',
-					['git', 'push', 'https://%s:%s@%s' % (gh_user, gh_token, main_repo), 'master'])
-			check_call('git',
-					['git', 'push', 'https://%s:%s@%s' % (gh_user, gh_token, main_repo), version.full])
-		print("All done.")
-except SystemExit:
-	raise
-except:
-	exc_type, exc_value, exc_traceback = sys.exc_info()
-	print("Unexpected error:")
-	traceback.print_exception(exc_type, exc_value, exc_traceback)
-	print("Release aborted. Press enter to exit.")
-	raw_input()
+		if options['ftp']:
+			publish_ftp(version)
+		elif options['docs']:
+			update_docs(version)
+		elif options['snapshot']:
+			build_snapshot(version)
+		else:
+			build_release(version)
+			if raw_input('Push git release commit? [y/N] ') == "y":
+				gh_user = credentials.get('github user')
+				gh_token = credentials.getpass('github token')
+				main_repo = 'github.com/llbit/chunky.git'
+				check_call('git',
+						['git', 'push', 'https://%s:%s@%s' % (gh_user, gh_token, main_repo), 'master'])
+				check_call('git',
+						['git', 'push', 'https://%s:%s@%s' % (gh_user, gh_token, main_repo), version.full])
+			print("All done.")
+	except SystemExit:
+		raise
+	except:
+		exc_type, exc_value, exc_traceback = sys.exc_info()
+		print("Unexpected error:")
+		traceback.print_exception(exc_type, exc_value, exc_traceback)
+		print("Release aborted. Press enter to exit.")
+		raw_input()
 
