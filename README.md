@@ -19,10 +19,21 @@ Add release notes:
     vi data/release_notes-<VERSION>.txt
 
 
-Start the container:
+Start the container via script:
 
-    ./start-docker.sh
+    ./release-master.sh
     # ./shipit.py <VERSION>
+
+
+Start the container manually:
+
+    docker build -t chunkybuild .
+    docker run -it \
+      --rm \
+      --name chunky \
+      -e RELEASE_GIT_BRANCH=master \
+      -v "$PWD/private:/chunky/private" \
+      chunkybuild
 
 
 ## Tools Used

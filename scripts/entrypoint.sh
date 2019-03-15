@@ -4,6 +4,8 @@ set -e
 
 cp private/gradle.properties ~/.gradle/
 git pull
+git checkout $RELEASE_GIT_BRANCH
+git show --oneline -s
 gpg --import private/release.key
 
 echo "Pre-release checklist:"
